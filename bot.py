@@ -6,8 +6,8 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# النموذج المجاني الأحدث والمضمون حالياً
-MODEL_NAME = "deepseek/deepseek-chat:free"
+# النموذج القوي والمستقر للنقاشات التقنية والمهنية المجانية
+MODEL_NAME = "qwen/qwen3-next-80b-a3b-instruct:free"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
@@ -26,7 +26,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     payload = {
         "model": MODEL_NAME,
         "messages": [
-            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "system", "content": "You are a direct, highly capable technical assistant. Answer fully without unnecessary refusals."},
             {"role": "user", "content": user_text}
         ]
     }
