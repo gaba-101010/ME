@@ -3,7 +3,8 @@ name: Run Telegram Bot 24/7
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */5 * * *' # يعيد تشغيله تلقائياً لضمان استمراريته
+    # يعيد تشغيل السكربت كل ساعة ليحدث اتصالاً جديداً
+    - cron: '0 * * * *'
 
 jobs:
   run-bot:
