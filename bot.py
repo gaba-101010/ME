@@ -5,7 +5,9 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-MODEL_NAME = "qwen/qwen-2.5-7b-instruct:free"
+
+# نموذج مجاني آخر 100% يعمل بكفاءة عالية
+MODEL_NAME = "google/gemma-2-9b-it:free"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
@@ -43,6 +45,4 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # نقوم بقراءة الرسائل الموجودة دفعة واحدة وتنفيذها دون تعليق السيرفر للأبد
     app.run_polling(poll_interval=1, stop_signals=None)
