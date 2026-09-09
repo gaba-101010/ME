@@ -6,8 +6,8 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# نموذج مجاني آخر 100% يعمل بكفاءة عالية
-MODEL_NAME = "google/gemma-2-9b-it:free"
+# النموذج المجاني الأحدث والمضمون حالياً
+MODEL_NAME = "deepseek/deepseek-chat:free"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
