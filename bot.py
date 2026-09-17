@@ -3,11 +3,10 @@ import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 
-# يقرأ المفتاح سواء أسميته GROQ_API_KEY أو GROQ_KEY في السيكرت
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or os.environ.get("GROQ_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# نموذج Groq القوي والسريع جداً
+# الموديل المستخرج من السكربت الخاص بك
 MODEL_NAME = "llama-3.3-70b-versatile"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
