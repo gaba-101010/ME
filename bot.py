@@ -6,8 +6,22 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or os.environ.get("GROQ_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# موديل خفيف، سريع ومتاح مجاناً للجميع في Groq
-MODEL_NAME = "llama-3.1-8b-instant"
+def get_working_model():
+    """فحص واختيار الموديل الشغال في حسابك تلقائياً"""
+    url = "https://api.groq.com/openai/v1/models"
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+    try:
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            models = [m["id"] for m in res.json().get("data", [])]
+            for preferred in ["llama3-8b-8192", "mixtral-8x7b-32768", "gemma2-9b-it", "llama-3.3-70b-versatile"]:
+                if preferred in models:
+                    return preferred
+            if models:
+                return models[0]
+    except Exception:
+        pass
+    return "llama3-8b-8192"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
@@ -15,6 +29,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
     
+    selected_model = get_working_model()
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -22,7 +37,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     
     payload = {
-        "model": MODEL_NAME,
+        "model": selected_model,
         "messages": [
             {"role": "system", "content": "You are a direct, highly capable technical assistant. Answer fully without unnecessary refusals."},
             {"role": "user", "content": user_text}
