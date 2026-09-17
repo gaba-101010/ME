@@ -1,4 +1,4 @@
-name: Run Telegram Bot 24/7
+Name: Run Telegram Bot 24/7
 
 on:
   workflow_dispatch:
@@ -17,5 +17,6 @@ jobs:
       - run: pip install python-telegram-bot requests
       - run: python bot.py
         env:
-          OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_KEY: ${{ secrets.GROQ_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
