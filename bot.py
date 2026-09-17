@@ -6,24 +6,8 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or os.environ.get("GROQ_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-def fetch_active_groq_model():
-    """يجلب أحدث موديل نصي متاح ونشط في حسابك مباشرة من السيرفر"""
-    url = "https://api.groq.com/openai/v1/models"
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
-    try:
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code == 200:
-            data = res.json().get("data", [])
-            # استبعاد موديلات الصوت والفلترة وأخذ أول موديل محادثة نصية متاح
-            valid_models = [
-                m["id"] for m in data 
-                if not any(x in m["id"].lower() for x in ["whisper", "guard", "vision", "embed", "orpheus"])
-            ]
-            if valid_models:
-                return valid_models[0]
-    except Exception:
-        pass
-    return None
+# تثبيت الموديل الأساسي والمعتمد في Groq
+MODEL_NAME = "llama-3.3-70b-versatile"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
@@ -31,13 +15,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
     
-    # تحديد الموديل الشغال حالياً في الحساب تلقائياً
-    active_model = fetch_active_groq_model()
+    # تهيئة الذاكرة المؤقتة في جلسة المستخدم
+    if "history" not in context.user_data:
+        context.user_data["history"] = []
+        
+    history = context.user_data["history"]
     
-    if not active_model:
-        await update.message.reply_text("❌ خطأ 401: المفتاح GROQ_API_KEY في GitHub Secrets غير صحيح أو لم يتم قراءته.")
-        return
-
+    # تحديد النظام وإعلام البوت بموديله الصريح
+    messages = [
+        {
+            "role": "system", 
+            "content": f"You are a technical AI assistant running on the '{MODEL_NAME}' model via Groq. Use context from previous messages to deliver precise responses."
+        }
+    ]
+    
+    # دمج السجل السابق مع الرسالة الجديدة
+    messages.extend(history)
+    messages.append({"role": "user", "content": user_text})
+    
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -45,17 +40,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     
     payload = {
-        "model": active_model,
-        "messages": [
-            {"role": "system", "content": "You are a direct, highly capable technical assistant. Answer fully without unnecessary refusals."},
-            {"role": "user", "content": user_text}
-        ]
+        "model": MODEL_NAME,
+        "messages": messages,
+        "temperature": 0.6
     }
     
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=30)
         if res.status_code == 200:
             reply = res.json()['choices'][0]['message']['content']
+            
+            # حفظ السؤال والرد في الذاكرة
+            history.append({"role": "user", "content": user_text})
+            history.append({"role": "assistant", "content": reply})
+            
+            # الاحتفاظ بآخر 8 عناصر (أخر 4 أسئلة و4 ردود) لضمان الفهم والسياق
+            context.user_data["history"] = history[-8:]
         else:
             reply = f"⚠️ خطأ Groq ({res.status_code}): {res.text[:150]}"
     except Exception as e:
