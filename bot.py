@@ -3,11 +3,12 @@ import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_KEY")
+# يقرأ المفتاح سواء أسميته GROQ_API_KEY أو GROQ_KEY في السيكرت
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or os.environ.get("GROQ_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# هذا هو الموجه التلقائي المجاني الرسمي من OpenRouter لضمان عدم حدوث خطأ 404 نهائياً
-MODEL_NAME = "openrouter/free"
+# نموذج Groq القوي والسريع جداً
+MODEL_NAME = "llama-3.3-70b-versatile"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
@@ -15,12 +16,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
     
-    url = "https://openrouter.ai/api/v1/chat/completions"
+    url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com",
-        "X-Title": "TelegramBot"
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
     }
     
     payload = {
@@ -36,7 +35,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if res.status_code == 200:
             reply = res.json()['choices'][0]['message']['content']
         else:
-            reply = f"⚠️ خطأ OpenRouter (كود {res.status_code}): {res.text[:150]}"
+            reply = f"⚠️ خطأ Groq (كود {res.status_code}): {res.text[:150]}"
     except Exception as e:
         reply = f"❌ خطأ تقني: {e}"
 
