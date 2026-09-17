@@ -6,8 +6,8 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or os.environ.get("GROQ_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# الموديل المستخرج من السكربت الخاص بك
-MODEL_NAME = "llama-3.3-70b-versatile"
+# موديل خفيف، سريع ومتاح مجاناً للجميع في Groq
+MODEL_NAME = "llama-3.1-8b-instant"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
