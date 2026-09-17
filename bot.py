@@ -6,22 +6,41 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or os.environ.get("GROQ_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-def get_working_model():
-    """فحص واختيار الموديل الشغال في حسابك تلقائياً"""
+def get_chat_model():
+    """فلترة وتحديد موديلات الدردشة النصية فقط واستبعاد الصوتیات والتجريبية"""
     url = "https://api.groq.com/openai/v1/models"
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+    
+    preferred_models = [
+        "llama-3.1-8b-instant",
+        "llama-3.3-70b-versatile",
+        "llama3-8b-8192",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it"
+    ]
+    
     try:
         res = requests.get(url, headers=headers, timeout=10)
         if res.status_code == 200:
-            models = [m["id"] for m in res.json().get("data", [])]
-            for preferred in ["llama3-8b-8192", "mixtral-8x7b-32768", "gemma2-9b-it", "llama-3.3-70b-versatile"]:
-                if preferred in models:
-                    return preferred
-            if models:
-                return models[0]
+            all_models = [m["id"] for m in res.json().get("data", [])]
+            
+            # 1. مطابقة الموديلات الموصى بها أولاً
+            for model in preferred_models:
+                if model in all_models:
+                    return model
+                    
+            # 2. فلترة أي موديل نصي متاح وتجاهل موديلات الصوت والصورة
+            chat_models = [
+                m for m in all_models 
+                if any(name in m.lower() for name in ["llama", "gemma", "mixtral"]) 
+                and not any(bad in m.lower() for bad in ["whisper", "orpheus", "guard", "vision", "embed"])
+            ]
+            if chat_models:
+                return chat_models[0]
     except Exception:
         pass
-    return "llama3-8b-8192"
+        
+    return "llama-3.1-8b-instant"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
@@ -29,7 +48,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
     
-    selected_model = get_working_model()
+    selected_model = get_chat_model()
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
