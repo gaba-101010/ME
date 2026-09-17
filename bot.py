@@ -8,27 +8,27 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or os.environ.get("GROQ_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# تثبيت الموديل المعتمد بناءً على طلبك
+# استخدام النموذج المعتمد والشغال عندك
 MODEL_NAME = "groq/compound-mini"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     chat_id = update.message.chat_id
     
-    # إظهار حالة "جاري الكتابة" في تليجرام
+    # إظهار حالة "جاري الكتابة"
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
     
-    # تهيئة الذاكرة المؤقتة للدردشة
+    # تهيئة الذاكرة المؤقتة
     if "history" not in context.user_data:
         context.user_data["history"] = []
         
     history = context.user_data["history"]
     
-    # إعداد سياق النظام والذاكرة التراكمية
+    # إعداد الذاكرة والسياق
     messages = [
         {
             "role": "system", 
-            "content": f"You are a helpful AI assistant running on model '{MODEL_NAME}'. Use context from previous messages to deliver accurate answers."
+            "content": "You are a helpful AI assistant. Answer clearly and fully in Arabic."
         }
     ]
     messages.extend(history)
@@ -48,31 +48,42 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     
     reply = None
+    last_error_details = ""
     max_retries = 3
 
-    # حلقة إعادة المحاولة داخل السكربت لتجاوز أخطاء 401 العابرة من Groq
+    # محاولات إعادة الاتصال مع انتظار ذكي لامتصاص ضغط الدقيقة
     for attempt in range(max_retries):
         try:
-            res = requests.post(url, headers=headers, json=payload, timeout=25)
+            res = requests.post(url, headers=headers, json=payload, timeout=30)
             if res.status_code == 200:
                 reply = res.json()['choices'][0]['message']['content']
                 break
-            elif res.status_code in [401, 429, 500, 503]:
-                # في حال رجوع خطأ مؤقت، ينتظر 0.5 ثانية ويعيد المحاولة كودياً
-                time.sleep(0.5)
             else:
-                reply = f"⚠️ خطأ من Groq (كود {res.status_code}): {res.text[:150]}"
-                break
+                try:
+                    err_data = res.json()
+                    err_msg = err_data.get("error", {}).get("message", res.text[:120])
+                except Exception:
+                    err_msg = res.text[:120]
+                
+                last_error_details = f"كود الاستجابة ({res.status_code}): {err_msg}"
+                
+                # إذا كان السبب تجاوز حد الطلبات في الدقيقة (429 Rate Limit) ننتظر لتفريغ الضغط
+                if res.status_code == 429:
+                    time.sleep(4 * (attempt + 1)) # انتظار 4 ثم 8 ثم 12 ثانية
+                else:
+                    time.sleep(1)
         except Exception as e:
-            time.sleep(0.5)
+            last_error_details = f"استثناء شبكة: {e}"
+            time.sleep(1)
 
     if reply:
-        # حفظ السؤال والرد في السجل ليتذكر آخر 4 محادثات (8 عناصر)
+        # حفظ آخر 4 محادثات
         history.append({"role": "user", "content": user_text})
         history.append({"role": "assistant", "content": reply})
         context.user_data["history"] = history[-8:]
     else:
-        reply = "❌ فشل الاتصال بسيرفر Groq بعد 3 محاولات تلقائية. يُرجى التحقق من مفتاح GROQ_API_KEY في GitHub Secrets."
+        # إظهار السبب الحقيقي مباشرة بدون رسائل مضللة
+        reply = f"⚠️ تعذر الاتصال بـ Groq:\n{last_error_details}"
 
     await update.message.reply_text(reply)
 
