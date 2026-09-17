@@ -1,92 +1,78 @@
 import os
+import time
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 
+# جلب المفاتيح من بيئة التشغيل
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or os.environ.get("GROQ_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-def get_startup_model():
-    """فحص واختيار الموديل المتاح في حسابك مرة واحدة فقط عند إقلاع البوت"""
-    url = "https://api.groq.com/openai/v1/models"
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
-    
-    preferred_models = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "llama3-70b-8192",
-        "llama3-8b-8192",
-        "gemma2-9b-it",
-        "deepseek-r1-distill-llama-70b"
-    ]
-    
-    try:
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code == 200:
-            available = [m["id"] for m in res.json().get("data", [])]
-            # 1. اختيار أول موديل مفضل موجود بحسابك
-            for p in preferred_models:
-                if p in available:
-                    return p
-            # 2. إذا لم يجد مفضل، يأخذ أول موديل محادثة نصية
-            for m in available:
-                if not any(bad in m.lower() for bad in ["whisper", "guard", "vision", "embed", "orpheus"]):
-                    return m
-    except Exception:
-        pass
-    
-    return "llama-3.1-8b-instant"
-
-# تحديد الموديل مرة واحدة فقط في الذاكرة عند بداية التشغيل
-ACTIVE_MODEL = get_startup_model()
-print(f"✅ تم اعتماد الموديل المتاح في حسابك بنجاح: {ACTIVE_MODEL}")
+# تثبيت الموديل المعتمد بناءً على طلبك
+MODEL_NAME = "groq/compound-mini"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     chat_id = update.message.chat_id
     
+    # إظهار حالة "جاري الكتابة" في تليجرام
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
     
-    # تهيئة الذاكرة التراكمية
+    # تهيئة الذاكرة المؤقتة للدردشة
     if "history" not in context.user_data:
         context.user_data["history"] = []
         
     history = context.user_data["history"]
     
+    # إعداد سياق النظام والذاكرة التراكمية
     messages = [
         {
             "role": "system", 
-            "content": f"You are a technical assistant powered by '{ACTIVE_MODEL}'. Answer directly and concisely."
+            "content": f"You are a helpful AI assistant running on model '{MODEL_NAME}'. Use context from previous messages to deliver accurate answers."
         }
     ]
     messages.extend(history)
     messages.append({"role": "user", "content": user_text})
     
     url = "https://api.groq.com/openai/v1/chat/completions"
+    clean_key = GROQ_API_KEY.strip() if GROQ_API_KEY else ""
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {clean_key}",
         "Content-Type": "application/json"
     }
     
     payload = {
-        "model": ACTIVE_MODEL,
+        "model": MODEL_NAME,
         "messages": messages,
         "temperature": 0.6
     }
     
-    try:
-        res = requests.post(url, headers=headers, json=payload, timeout=20)
-        if res.status_code == 200:
-            reply = res.json()['choices'][0]['message']['content']
-            
-            # حفظ المحادثة ليتذكر آخر 4 أسئلة و4 أجوِبة (8 عناصر)
-            history.append({"role": "user", "content": user_text})
-            history.append({"role": "assistant", "content": reply})
-            context.user_data["history"] = history[-8:]
-        else:
-            reply = f"⚠️ خطأ Groq ({res.status_code}): {res.text[:150]}"
-    except Exception as e:
-        reply = f"❌ خطأ تقني: {e}"
+    reply = None
+    max_retries = 3
+
+    # حلقة إعادة المحاولة داخل السكربت لتجاوز أخطاء 401 العابرة من Groq
+    for attempt in range(max_retries):
+        try:
+            res = requests.post(url, headers=headers, json=payload, timeout=25)
+            if res.status_code == 200:
+                reply = res.json()['choices'][0]['message']['content']
+                break
+            elif res.status_code in [401, 429, 500, 503]:
+                # في حال رجوع خطأ مؤقت، ينتظر 0.5 ثانية ويعيد المحاولة كودياً
+                time.sleep(0.5)
+            else:
+                reply = f"⚠️ خطأ من Groq (كود {res.status_code}): {res.text[:150]}"
+                break
+        except Exception as e:
+            time.sleep(0.5)
+
+    if reply:
+        # حفظ السؤال والرد في السجل ليتذكر آخر 4 محادثات (8 عناصر)
+        history.append({"role": "user", "content": user_text})
+        history.append({"role": "assistant", "content": reply})
+        context.user_data["history"] = history[-8:]
+    else:
+        reply = "❌ فشل الاتصال بسيرفر Groq بعد 3 محاولات تلقائية. يُرجى التحقق من مفتاح GROQ_API_KEY في GitHub Secrets."
 
     await update.message.reply_text(reply)
 
