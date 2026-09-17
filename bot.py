@@ -6,41 +6,14 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or os.environ.get("GROQ_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-def get_chat_model():
-    """فلترة وتحديد موديلات الدردشة النصية فقط واستبعاد الصوتیات والتجريبية"""
-    url = "https://api.groq.com/openai/v1/models"
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
-    
-    preferred_models = [
-        "llama-3.1-8b-instant",
-        "llama-3.3-70b-versatile",
-        "llama3-8b-8192",
-        "mixtral-8x7b-32768",
-        "gemma2-9b-it"
-    ]
-    
-    try:
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code == 200:
-            all_models = [m["id"] for m in res.json().get("data", [])]
-            
-            # 1. مطابقة الموديلات الموصى بها أولاً
-            for model in preferred_models:
-                if model in all_models:
-                    return model
-                    
-            # 2. فلترة أي موديل نصي متاح وتجاهل موديلات الصوت والصورة
-            chat_models = [
-                m for m in all_models 
-                if any(name in m.lower() for name in ["llama", "gemma", "mixtral"]) 
-                and not any(bad in m.lower() for bad in ["whisper", "orpheus", "guard", "vision", "embed"])
-            ]
-            if chat_models:
-                return chat_models[0]
-    except Exception:
-        pass
-        
-    return "llama-3.1-8b-instant"
+# قائمة الموديلات النصية المعتمدة في Groq بترتيب الأفضلية
+GROQ_MODELS = [
+    "llama3-8b-8192",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "gemma2-9b-it",
+    "mixtral-8x7b-32768"
+]
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
@@ -48,29 +21,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
     
-    selected_model = get_chat_model()
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
     
-    payload = {
-        "model": selected_model,
-        "messages": [
-            {"role": "system", "content": "You are a direct, highly capable technical assistant. Answer fully without unnecessary refusals."},
-            {"role": "user", "content": user_text}
-        ]
-    }
-    
-    try:
-        res = requests.post(url, headers=headers, json=payload, timeout=30)
-        if res.status_code == 200:
-            reply = res.json()['choices'][0]['message']['content']
-        else:
-            reply = f"⚠️ خطأ Groq (كود {res.status_code}): {res.text[:150]}"
-    except Exception as e:
-        reply = f"❌ خطأ تقني: {e}"
+    reply = None
+    last_error = ""
+
+    # تجربة الموديلات تلقائياً في الخلفية حتى ينجح أحدها
+    for model in GROQ_MODELS:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "You are a direct, highly capable technical assistant. Answer fully without unnecessary refusals."},
+                {"role": "user", "content": user_text}
+            ]
+        }
+        try:
+            res = requests.post(url, headers=headers, json=payload, timeout=15)
+            if res.status_code == 200:
+                reply = res.json()['choices'][0]['message']['content']
+                break  # نجح الطلب، اخرج من الحلقة وأرسل الرد
+            else:
+                last_error = f"⚠️ خطأ Groq (كود {res.status_code}): {res.text[:120]}"
+        except Exception as e:
+            last_error = f"❌ خطأ تقني: {e}"
+
+    if not reply:
+        reply = last_error
 
     await update.message.reply_text(reply)
 
